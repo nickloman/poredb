@@ -32,6 +32,7 @@ create table trackedfiles (
   sequenced_date integer not null
 );
 
+create unique index trackedfiles_filepath on trackedfiles ( filepath );
 create index trackedfiles_uuid on trackedfiles ( uuid );
 
 -- basecaller
@@ -85,9 +86,9 @@ def md5(fname):
 			hash_md5.update(chunk)
 		return hash_md5.hexdigest()
 
-def trackedfiles_find(uuid):
-	sql = "SELECT file_id FROM trackedfiles WHERE uuid = ?"
-	c.execute(sql, (uuid,))
+def trackedfiles_find(fn):
+	sql = "SELECT file_id FROM trackedfiles WHERE filepath = ?"
+	c.execute(sql, (fn,))
 	return c.fetchone()
 
 def trackedfiles_add(experiment_id, uuid, md5sig, filepath, sequenced_date):
@@ -129,7 +130,7 @@ def import_reads(fofn):
 		fast5 = Fast5File(fn)
 
 		# how to handle files
-		# first - is uuid in database?
+		# first - is fn in database?
 		#   no -- add it as a tracked file - this is heuristic
 		#  yes -- is it the same file ?
 		#            check md5
@@ -141,7 +142,7 @@ def import_reads(fofn):
 		block = fast5.find_read_number_block_fixed_raw()
 		uuid = block.attrs['read_id']
 
-		if not trackedfiles_find(uuid):
+		if not trackedfiles_find(fn):
 			# get flowcell
 			flowcell_id = fast5.get_flowcell_id()
 			asic_id = fast5.get_asic_id()
