@@ -22,6 +22,8 @@ create table experiment (
   minion_id varchar(40) not null
 );
 
+create unique index experiment_id on experiment ( experiment_id );
+
 -- all files in file system
 create table trackedfiles (
   file_id integer primary key not null,
@@ -124,15 +126,11 @@ def basecall_add(read_id, basecaller_id, group, template):
 
 def import_reads(fofn):
 	matcher = re.compile('Basecall_1D_(\d+)')
+	n_added = 0
 
 	for fn in open(fofn):
 		fn = fn.rstrip()
 		print >>sys.stderr, "Processing %s" % (fn,)
-		fast5 = Fast5File(fn)
-		if not fast5.is_open:
-			print >>sys.stderr, "Cannot open %s" % (fn,)
-			continue
-
 
 		# how to handle files
 		# first - is fn in database?
@@ -140,14 +138,20 @@ def import_reads(fofn):
 		#  yes -- is it the same file ?
 		#            check md5
 		#            if md5 different & path same -- update contents
-                #            if md5 same & path different -- update path
+        #            if md5 same & path different -- update path
 		#            if md5 same & path same -- skip
-                #            or skip it
+        #            or skip it
 
-		block = fast5.find_read_number_block_fixed_raw()
-		uuid = block.attrs['read_id']
+		tracked = trackedfiles_find(fn)
+		if not tracked:
+			fast5 = Fast5File(fn)
+			if not fast5.is_open:
+				print >>sys.stderr, "Cannot open %s" % (fn,)
+				continue
 
-		if not trackedfiles_find(fn):
+			block = fast5.find_read_number_block_fixed_raw()
+			uuid = block.attrs['read_id']
+
 			# get flowcell
 			flowcell_id = fast5.get_flowcell_id()
 			asic_id = fast5.get_asic_id()
@@ -187,11 +191,14 @@ def import_reads(fofn):
 						template = None
 
 					basecall_add(read_id, basecaller_id, group, template)
-				else:
-					print >>sys.stderr, "Skipping %s" % (k,)
 
-		fast5.close()
-
+			n_added += 1
+			if n_added % 1000 == 0:
+				print >>sys.stderr, "Committing"
+				conn.commit()
+			fast5.close()
+		else:
+			print >>sys.stderr, "Already seen file %s, skipping" % (fn,)
 
 import_reads(sys.argv[2])
 conn.commit()
