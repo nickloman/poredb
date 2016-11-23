@@ -4,11 +4,14 @@ create table flowcell (
   asic_id varchar(50) not null
 );
 
+create unique index flowcell_idx on flowcell ( flowcell_id, asic_id );
+
 create table experiment (
   flowcell_id varchar(50) references flowcell ( flowcell_id ) not null,
   experiment_id varchar(100) not null,
   library_name varchar(40) not null,
   script_name varchar(100) not null,
+  host_name varchar(100) not null,
   exp_start_time integer not null,
   minion_id varchar(40) not null
 );
