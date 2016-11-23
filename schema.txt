@@ -1,0 +1,45 @@
+
+create table flowcell (
+  flowcell_id varchar(50) primary key not null,
+  asic_id varchar(50) not null
+);
+
+create table experiment (
+  flowcell_id varchar(50) references flowcell ( flowcell_id ) not null,
+  experiment_id varchar(100) not null,
+  library_name varchar(40) not null,
+  script_name varchar(100) not null,
+  exp_start_time integer not null,
+  minion_id varchar(40) not null
+);
+
+-- all files in file system
+create table trackedfiles (
+  file_id integer primary key not null,
+  experiment_id varchar(100) references experiment ( experiment_id ) not null,
+  uuid varchar(64) not null,
+  md5 varchar(64) not null,
+  filepath text not null,
+  sequenced_date integer not null
+);
+
+-- basecaller
+create table basecaller (
+  basecaller_id integer primary key not null,
+  name varchar(100) not null,
+  version varchar(100) not null
+);
+
+-- basecealls
+create table basecall (
+  file_id integer references trackedfiles ( file_id ) not null,
+  basecaller integer references basecaller ( basecalled_id ) not null,
+  barcode varchar(10) null,
+  group_id integer not null,
+  template text not null,
+  complement text null,
+  twod text null
+);
+
+
+
