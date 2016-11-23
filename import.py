@@ -51,7 +51,7 @@ create table basecall (
   file_id integer references trackedfiles ( file_id ) not null,
   basecaller_id integer references basecaller ( basecaller_id ) not null,
   group_id integer not null,
-  template text null,
+  template text null
 );
 """
 
@@ -127,7 +127,12 @@ def import_reads(fofn):
 
 	for fn in open(fofn):
 		fn = fn.rstrip()
+		print >>sys.stderr, "Processing %s" % (fn,)
 		fast5 = Fast5File(fn)
+		if not fast5.is_open:
+			print >>sys.stderr, "Cannot open %s" % (fn,)
+			continue
+
 
 		# how to handle files
 		# first - is fn in database?
@@ -184,6 +189,8 @@ def import_reads(fofn):
 					basecall_add(read_id, basecaller_id, group, template)
 				else:
 					print >>sys.stderr, "Skipping %s" % (k,)
+
+		fast5.close()
 
 
 import_reads(sys.argv[2])
