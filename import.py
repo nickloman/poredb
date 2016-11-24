@@ -1,4 +1,8 @@
+# Thanks for Andreas Klosterman for dask suggestion
 from poretools.poretools.Fast5File import Fast5File
+from dask import compute, delayed
+import dask.multiprocessing
+import dask.threaded
 import sys
 import md5
 import hashlib
@@ -58,10 +62,14 @@ create table basecall (
 """
 
 import sqlite3
-conn = sqlite3.connect(sys.argv[1])
-c = conn.cursor()
+import logging
 
-def flowcell_get_or_create(flowcell_id, asic_id):
+logging.basicConfig()
+logger = logging.getLogger('poretools')
+
+
+
+def flowcell_get_or_create(c, flowcell_id, asic_id):
 	sql = "SELECT flowcell_id, asic_id FROM flowcell WHERE flowcell_id = ? AND asic_id = ?"
 	c.execute(sql, (flowcell_id, asic_id))
 	r = c.fetchone()
@@ -70,8 +78,9 @@ def flowcell_get_or_create(flowcell_id, asic_id):
 
 	sql = "INSERT INTO flowcell ( flowcell_id, asic_id ) VALUES ( ?, ? )"
 	c.execute(sql, (flowcell_id, asic_id))
+	conn.commit()
 
-def experiment_get_or_create(flowcell_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id):
+def experiment_get_or_create(c, flowcell_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id):
 	sql = "SELECT experiment_id FROM experiment WHERE experiment_id = ?"
 	c.execute(sql, (experiment_id,))
 	r = c.fetchone()
@@ -80,6 +89,7 @@ def experiment_get_or_create(flowcell_id, experiment_id, library_name, script_na
 
 	sql = "INSERT INTO experiment ( flowcell_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id ) VALUES ( ?, ?, ?, ?, ?, ?, ? )"
 	c.execute(sql, (flowcell_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id))
+	conn.commit()
 
 def md5(fname):
 	hash_md5 = hashlib.md5()
@@ -88,12 +98,12 @@ def md5(fname):
 			hash_md5.update(chunk)
 		return hash_md5.hexdigest()
 
-def trackedfiles_find(fn):
+def trackedfiles_find(c, fn):
 	sql = "SELECT file_id FROM trackedfiles WHERE filepath = ?"
 	c.execute(sql, (fn,))
 	return c.fetchone()
 
-def trackedfiles_add(experiment_id, uuid, md5sig, filepath, sequenced_date):
+def trackedfiles_add(c, experiment_id, uuid, md5sig, filepath, sequenced_date):
 	sql = "INSERT INTO trackedfiles ( experiment_id, uuid, md5, filepath, sequenced_date ) VALUES ( ?, ?, ?, ?, ? )"
 	c.execute(sql, (experiment_id, uuid, md5sig, filepath, sequenced_date))
 	return c.lastrowid
@@ -109,7 +119,7 @@ def get_basecaller_version(g):
 	except:
 		return None	
 
-def basecaller_get_or_delete(name, version):
+def basecaller_get_or_delete(c, name, version):
 	sql = "SELECT basecaller_id FROM basecaller WHERE name = ? AND version = ?"
 	c.execute(sql, (name, version))
 	row = c.fetchone()
@@ -118,18 +128,20 @@ def basecaller_get_or_delete(name, version):
 
 	sql = "INSERT INTO basecaller ( name, version ) VALUES ( ?, ? )"
 	c.execute(sql, (name, version))
+	conn.commit()
 	return c.lastrowid
 
-def basecall_add(read_id, basecaller_id, group, template):
+def basecall_add(c, read_id, basecaller_id, group, template):
 	sql = "INSERT INTO basecall ( file_id, basecaller_id, group_id, template ) VALUES ( ?, ?, ?, ? )"
 	c.execute(sql, (read_id, basecaller_id, group, template))
 
-def import_reads(fofn):
+def process(lofn):
+	c = conn.cursor()
+
 	matcher = re.compile('Basecall_1D_(\d+)')
 	n_added = 0
 
-	for fn in open(fofn):
-		fn = fn.rstrip()
+	for fn in lofn:
 		print >>sys.stderr, "Processing %s" % (fn,)
 
 		# how to handle files
@@ -138,24 +150,27 @@ def import_reads(fofn):
 		#  yes -- is it the same file ?
 		#            check md5
 		#            if md5 different & path same -- update contents
-        #            if md5 same & path different -- update path
+		#            if md5 same & path different -- update path
 		#            if md5 same & path same -- skip
-        #            or skip it
+		#            or skip it
 
-		tracked = trackedfiles_find(fn)
+		tracked = trackedfiles_find(c, fn)
+		print tracked
+
 		if not tracked:
 			fast5 = Fast5File(fn)
 			if not fast5.is_open:
 				print >>sys.stderr, "Cannot open %s" % (fn,)
 				continue
 
+			print >>sys.stderr, fn
 			block = fast5.find_read_number_block_fixed_raw()
 			uuid = block.attrs['read_id']
 
 			# get flowcell
 			flowcell_id = fast5.get_flowcell_id()
 			asic_id = fast5.get_asic_id()
-			flowcell_get_or_create(flowcell_id, asic_id)
+			flowcell_get_or_create(c, flowcell_id, asic_id)
 
 			# get experiment
 			experiment_id = fast5.get_run_id()
@@ -165,41 +180,55 @@ def import_reads(fofn):
 			host_name = fast5.get_host_name()
 			minion_id = fast5.get_device_id()
 
-			experiment_get_or_create(flowcell_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id)
+			experiment_get_or_create(c, flowcell_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id)
 
 			# add trackedfile
 			sequenced_date = int(block.attrs['start_time'])
 			sample_frequency = int(fast5.get_sample_frequency())
 			md5sig = md5(fn)
 			start_time = exp_start_time + (sequenced_date / sample_frequency)
-			read_id = trackedfiles_add(experiment_id, uuid, md5sig, fn, start_time)
+			read_id = trackedfiles_add(c, experiment_id, uuid, md5sig, fn, start_time)
 
 			# basecalls
 			analyses = fast5.hdf5file.get('Analyses')
-			for k, g in analyses.iteritems():
-				m = matcher.match(k)
-				if m:
-					basecaller_name = g.attrs['name']
-					group = m.group(1)
-					version = get_basecaller_version(g)
+			if analyses:
+				for k, g in analyses.iteritems():
+					m = matcher.match(k)
+					if m:
+						basecaller_name = g.attrs['name']
+						group = m.group(1)
+						version = get_basecaller_version(g)
 
-					basecaller_id = basecaller_get_or_delete(basecaller_name, version)
+						basecaller_id = basecaller_get_or_delete(c, basecaller_name, version)
 
-					try:
-						template = analyses.get("%s/BaseCalled_template" % (k,))['Fastq'][()]
-					except:
-						template = None
+						try:
+							template = analyses.get("%s/BaseCalled_template" % (k,))['Fastq'][()]
+						except:
+							template = None
 
-					basecall_add(read_id, basecaller_id, group, template)
+						basecall_add(c, read_id, basecaller_id, group, template)
+			conn.commit()
 
 			n_added += 1
 			if n_added % 1000 == 0:
 				print >>sys.stderr, "Committing"
-				conn.commit()
-			fast5.close()
 		else:
 			print >>sys.stderr, "Already seen file %s, skipping" % (fn,)
+		conn.commit()
 
+def import_reads(fofn):
+	files = [fn.rstrip() for fn in open(fofn)]
+	process(files)
+
+def import_reads_parallel(fofn):
+	files = [fn.rstrip() for fn in open(fofn)]
+	f = lambda A, n=1000: [A[i:i+n] for i in range(0, len(A), n)]
+
+	print >>sys.stderr, "%s files in list" % ( len(files), )
+
+	values = [delayed(process)(x) for x in f(files)]
+	results = compute(*values, get=dask.threaded.get)
+
+conn = sqlite3.connect(sys.argv[1], check_same_thread=False, timeout=30)
 import_reads(sys.argv[2])
-conn.commit()
 
