@@ -7,89 +7,33 @@ import sys
 import md5
 import hashlib
 import re
-
-"""
-create table flowcell (
-  flowcell_id varchar(50) primary key not null,
-  asic_id varchar(50) not null
-);
-
-create unique index flowcell_idx on flowcell ( flowcell_id, asic_id );
-
-create table experiment (
-  flowcell_id varchar(50) references flowcell ( flowcell_id ) not null,
-  experiment_id varchar(100) not null,
-  library_name varchar(40) not null,
-  script_name varchar(100) not null,
-  host_name varchar(100) not null,
-  exp_start_time integer not null,
-  minion_id varchar(40) not null
-);
-
-create unique index experiment_id on experiment ( experiment_id );
-
--- all files in file system
-create table trackedfiles (
-  file_id integer primary key not null,
-  experiment_id varchar(100) references experiment ( experiment_id ) not null,
-  uuid varchar(64) not null,
-  md5 varchar(64) not null,
-  filepath text not null,
-  sequenced_date integer not null
-);
-
-create unique index trackedfiles_filepath on trackedfiles ( filepath );
-create index trackedfiles_uuid on trackedfiles ( uuid );
-
--- basecaller
-create table basecaller (
-  basecaller_id integer primary key not null,
-  name varchar(100) not null,
-  version varchar(100) not null
-);
-
--- basecealls
--- TODO: complement
--- TODO: 2d
--- TODO: barcoding
-
-create table basecall (
-  file_id integer references trackedfiles ( file_id ) not null,
-  basecaller_id integer references basecaller ( basecaller_id ) not null,
-  group_id integer not null,
-  template text null
-);
-"""
-
 import sqlite3
 import logging
 
 logging.basicConfig()
 logger = logging.getLogger('poretools')
 
-
-
-def flowcell_get_or_create(c, flowcell_id, asic_id):
+def flowcell_get_or_create(db, flowcell_id, asic_id):
 	sql = "SELECT flowcell_id, asic_id FROM flowcell WHERE flowcell_id = ? AND asic_id = ?"
-	c.execute(sql, (flowcell_id, asic_id))
-	r = c.fetchone()
+	db.c.execute(sql, (flowcell_id, asic_id))
+	r = db.c.fetchone()
 	if r:
 		return
 
 	sql = "INSERT INTO flowcell ( flowcell_id, asic_id ) VALUES ( ?, ? )"
-	c.execute(sql, (flowcell_id, asic_id))
-	conn.commit()
+	db.c.execute(sql, (flowcell_id, asic_id))
+	db.conn.commit()
 
-def experiment_get_or_create(c, flowcell_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id):
+def experiment_get_or_create(db, flowcell_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id):
 	sql = "SELECT experiment_id FROM experiment WHERE experiment_id = ?"
-	c.execute(sql, (experiment_id,))
-	r = c.fetchone()
+	db.c.execute(sql, (experiment_id,))
+	r = db.c.fetchone()
 	if r:
 		return
 
 	sql = "INSERT INTO experiment ( flowcell_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id ) VALUES ( ?, ?, ?, ?, ?, ?, ? )"
-	c.execute(sql, (flowcell_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id))
-	conn.commit()
+	db.c.execute(sql, (flowcell_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id))
+	db.conn.commit()
 
 def md5(fname):
 	hash_md5 = hashlib.md5()
@@ -98,15 +42,15 @@ def md5(fname):
 			hash_md5.update(chunk)
 		return hash_md5.hexdigest()
 
-def trackedfiles_find(c, fn):
+def trackedfiles_find(db, fn):
 	sql = "SELECT file_id FROM trackedfiles WHERE filepath = ?"
-	c.execute(sql, (fn,))
-	return c.fetchone()
+	db.c.execute(sql, (fn,))
+	return db.c.fetchone()
 
-def trackedfiles_add(c, experiment_id, uuid, md5sig, filepath, sequenced_date):
+def trackedfiles_add(db, experiment_id, uuid, md5sig, filepath, sequenced_date):
 	sql = "INSERT INTO trackedfiles ( experiment_id, uuid, md5, filepath, sequenced_date ) VALUES ( ?, ?, ?, ?, ? )"
-	c.execute(sql, (experiment_id, uuid, md5sig, filepath, sequenced_date))
-	return c.lastrowid
+	db.c.execute(sql, (experiment_id, uuid, md5sig, filepath, sequenced_date))
+	return db.c.lastrowid
 
 def get_basecaller_version(g):
 	try:
@@ -119,25 +63,31 @@ def get_basecaller_version(g):
 	except:
 		return None	
 
-def basecaller_get_or_delete(c, name, version):
+def basecaller_get_or_delete(db, name, version):
 	sql = "SELECT basecaller_id FROM basecaller WHERE name = ? AND version = ?"
-	c.execute(sql, (name, version))
-	row = c.fetchone()
+	db.c.execute(sql, (name, version))
+	row = db.c.fetchone()
 	if row:
 		return int(row[0])
 
 	sql = "INSERT INTO basecaller ( name, version ) VALUES ( ?, ? )"
-	c.execute(sql, (name, version))
-	conn.commit()
-	return c.lastrowid
+	db.c.execute(sql, (name, version))
+	db.conn.commit()
+	return db.c.lastrowid
 
-def basecall_add(c, read_id, basecaller_id, group, template):
+def basecall_add(db, read_id, basecaller_id, group, template):
 	sql = "INSERT INTO basecall ( file_id, basecaller_id, group_id, template ) VALUES ( ?, ?, ?, ? )"
-	c.execute(sql, (read_id, basecaller_id, group, template))
+	db.c.execute(sql, (read_id, basecaller_id, group, template))
 
-def process(lofn):
-	c = conn.cursor()
+class Db:
+	def __init__(self, dbname):
+		self.conn = sqlite3.connect(dbname, check_same_thread=False, timeout=30)
+		self.c = self.conn.cursor()
 
+	def __del__(self):
+		self.conn.close()
+
+def process(db, lofn):
 	matcher = re.compile('Basecall_1D_(\d+)')
 	n_added = 0
 
@@ -154,7 +104,7 @@ def process(lofn):
 		#            if md5 same & path same -- skip
 		#            or skip it
 
-		tracked = trackedfiles_find(c, fn)
+		tracked = trackedfiles_find(db, fn)
 		print tracked
 
 		if not tracked:
@@ -170,7 +120,7 @@ def process(lofn):
 			# get flowcell
 			flowcell_id = fast5.get_flowcell_id()
 			asic_id = fast5.get_asic_id()
-			flowcell_get_or_create(c, flowcell_id, asic_id)
+			flowcell_get_or_create(db, flowcell_id, asic_id)
 
 			# get experiment
 			experiment_id = fast5.get_run_id()
@@ -180,14 +130,14 @@ def process(lofn):
 			host_name = fast5.get_host_name()
 			minion_id = fast5.get_device_id()
 
-			experiment_get_or_create(c, flowcell_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id)
+			experiment_get_or_create(db, flowcell_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id)
 
 			# add trackedfile
 			sequenced_date = int(block.attrs['start_time'])
 			sample_frequency = int(fast5.get_sample_frequency())
 			md5sig = md5(fn)
 			start_time = exp_start_time + (sequenced_date / sample_frequency)
-			read_id = trackedfiles_add(c, experiment_id, uuid, md5sig, fn, start_time)
+			read_id = trackedfiles_add(db, experiment_id, uuid, md5sig, fn, start_time)
 
 			# basecalls
 			analyses = fast5.hdf5file.get('Analyses')
@@ -199,26 +149,27 @@ def process(lofn):
 						group = m.group(1)
 						version = get_basecaller_version(g)
 
-						basecaller_id = basecaller_get_or_delete(c, basecaller_name, version)
+						basecaller_id = basecaller_get_or_delete(db, basecaller_name, version)
 
 						try:
 							template = analyses.get("%s/BaseCalled_template" % (k,))['Fastq'][()]
 						except:
 							template = None
 
-						basecall_add(c, read_id, basecaller_id, group, template)
-			conn.commit()
+						basecall_add(db, read_id, basecaller_id, group, template)
+			db.conn.commit()
 
 			n_added += 1
 			if n_added % 1000 == 0:
 				print >>sys.stderr, "Committing"
 		else:
 			print >>sys.stderr, "Already seen file %s, skipping" % (fn,)
-		conn.commit()
+		db.conn.commit()
 
-def import_reads(fofn):
-	files = [fn.rstrip() for fn in open(fofn)]
-	process(files)
+def run(parser, args):
+	db = Db(args.db)
+	files = [fn.rstrip() for fn in open(args.fofn)]
+	process(db, files)
 
 def import_reads_parallel(fofn):
 	files = [fn.rstrip() for fn in open(fofn)]
@@ -228,7 +179,4 @@ def import_reads_parallel(fofn):
 
 	values = [delayed(process)(x) for x in f(files)]
 	results = compute(*values, get=dask.threaded.get)
-
-conn = sqlite3.connect(sys.argv[1], check_same_thread=False, timeout=30)
-import_reads(sys.argv[2])
 
