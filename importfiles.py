@@ -105,7 +105,6 @@ def process(db, lofn):
 		#            or skip it
 
 		tracked = trackedfiles_find(db, fn)
-		print tracked
 
 		if not tracked:
 			fast5 = Fast5File(fn)

@@ -18,6 +18,8 @@ def run_subtool(parser, args):
 		import create as submodule
 	elif args.command == 'import':
 		import importfiles as submodule
+	elif args.command == 'fastq':
+		import fastq as submodule
 
 	# run the chosen submodule.
 	submodule.run(parser, args)
@@ -51,6 +53,13 @@ def main():
 	parser_import.add_argument('fofn', metavar='FOFN',
 	                           help='A file containing a list of file names.')
 	parser_import.set_defaults(func=run_subtool)
+
+	# fastq
+	parser_fastq = subparsers.add_parser('fastq',
+                                          help='Export basecalls from database in FASTQ format')
+	parser_fastq.add_argument('db', metavar='DB',
+                             help='The name of the database.')
+	parser_fastq.set_defaults(func=run_subtool)
 
 	args = parser.parse_args()
 
