@@ -20,6 +20,8 @@ def run_subtool(parser, args):
 		import importfiles as submodule
 	elif args.command == 'fastq':
 		import fastq as submodule
+	elif args.command == 'updatelengths':
+		import updatelengths as submodule
 
 	# run the chosen submodule.
 	submodule.run(parser, args)
@@ -59,7 +61,13 @@ def main():
                                           help='Export basecalls from database in FASTQ format')
 	parser_fastq.add_argument('db', metavar='DB',
                              help='The name of the database.')
+	parser_fastq.add_argument('-l', '--lengths', dest='report_lengths', default=False, action='store_true', help="Report lengths instead of bases")
 	parser_fastq.set_defaults(func=run_subtool)
+
+	# updatelengths
+	parser_updatelengths = subparsers.add_parser('updatelengths', help='')
+	parser_updatelengths.add_argument('db', metavar='DB', help='The name of the database.')
+	parser_updatelengths.set_defaults(func=run_subtool)
 
 	args = parser.parse_args()
 

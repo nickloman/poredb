@@ -75,9 +75,9 @@ def basecaller_get_or_delete(db, name, version):
 	db.conn.commit()
 	return db.c.lastrowid
 
-def basecall_add(db, read_id, basecaller_id, group, template):
-	sql = "INSERT INTO basecall ( file_id, basecaller_id, group_id, template ) VALUES ( ?, ?, ?, ? )"
-	db.c.execute(sql, (read_id, basecaller_id, group, template))
+def basecall_add(db, read_id, basecaller_id, group, template, template_length):
+	sql = "INSERT INTO basecall ( file_id, basecaller_id, group_id, template, template_length ) VALUES ( ?, ?, ?, ?, ? )"
+	db.c.execute(sql, (read_id, basecaller_id, group, template, template_length))
 
 class Db:
 	def __init__(self, dbname):
@@ -155,7 +155,12 @@ def process(db, lofn):
 						except:
 							template = None
 
-						basecall_add(db, read_id, basecaller_id, group, template)
+						if template:
+							a,b,c,d,e = template.split("\n")
+							template_length = len(b.strip())
+						else:
+							template_length = None
+						basecall_add(db, read_id, basecaller_id, group, template, template_length)
 			db.conn.commit()
 
 			n_added += 1

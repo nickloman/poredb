@@ -19,12 +19,16 @@ def run(parser, args):
 	conn = sqlite3.connect(args.db, check_same_thread=False, timeout=30)
 	c = conn.cursor()
 
-	statement = """SELECT template, template_length FROM basecall WHERE template IS NOT NULL"""
+	statement = """SELECT ROWID, template FROM basecall WHERE template IS NOT NULL"""
+
+	c1 = conn.cursor()
 
 	resultset = c.execute(statement)
 	for r in resultset:
-		if args.report_lengths:
-			print r[1]
-		else:
-			print r[0],
+		a,b,c,d,e = r[1].split("\n")			
+		l = len(b.strip())
+		c1.execute("UPDATE basecall SET template_length = ? WHERE ROWID = ?", (l, r[0]))
+	
+	conn.commit()
+
 
