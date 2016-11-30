@@ -14,7 +14,13 @@ import mmap
 logging.basicConfig()
 logger = logging.getLogger('poretools')
 
+flowcell_cache = set()
+
 def flowcell_get_or_create(db, flowcell_id, asic_id):
+	check_cache = "%s-%s" % (flowcell_id, asic_id)
+	if check_cache in flowcell_cache:
+		return
+
 	sql = "SELECT flowcell_id, asic_id FROM flowcell WHERE flowcell_id = ? AND asic_id = ?"
 	db.c.execute(sql, (flowcell_id, asic_id))
 	r = db.c.fetchone()
@@ -23,10 +29,20 @@ def flowcell_get_or_create(db, flowcell_id, asic_id):
 
 	print "ADD: flowcell_id %s asic_id %s" % (flowcell_id, asic_id)
 	sql = "INSERT INTO flowcell ( flowcell_id, asic_id ) VALUES ( ?, ? )"
-	db.c.execute(sql, (flowcell_id, asic_id))
-	db.conn.commit()
+	try:
+	        db.c.execute(sql, (flowcell_id, asic_id))
+		db.conn.commit()
+	except sqlite3.IntegrityError:
+		print "unique constraint, skipping"
+
+	flowcell_cache.add(check_cache)
+
+experiment_cache = set()
 
 def experiment_get_or_create(db, flowcell_id, asic_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id):
+	if experiment_id in experiment_cache:
+		return
+
 	sql = "SELECT experiment_id FROM experiment WHERE experiment_id = ?"
 	db.c.execute(sql, (experiment_id,))
 	r = db.c.fetchone()
@@ -35,7 +51,14 @@ def experiment_get_or_create(db, flowcell_id, asic_id, experiment_id, library_na
 
 	sql = "INSERT INTO experiment ( flowcell_id, asic_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ? )"
 	db.c.execute(sql, (flowcell_id, asic_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id))
-	db.conn.commit()
+
+	try:
+	        db.c.execute(sql, (flowcell_id, asic_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id))
+		db.conn.commit()
+	except sqlite3.IntegrityError:
+		print "unique constraint, skipping"
+
+	experiment_cache.add(experiment_id)
 
 def md5(fname):
 	hash_md5 = hashlib.md5()
@@ -56,8 +79,10 @@ def trackedfiles_find(db, fn):
 
 def trackedfiles_add(db, experiment_id, uuid, md5sig, filepath, sequenced_date):
 	sql = "INSERT INTO trackedfiles ( experiment_id, uuid, md5, filepath, sequenced_date ) VALUES ( ?, ?, ?, ?, ? )"
-	db.c.execute(sql, (experiment_id, uuid, md5sig, filepath, sequenced_date))
-	return db.c.lastrowid
+	db.addcommand(sql, (experiment_id, uuid, md5sig, filepath, sequenced_date))
+
+#	db.c.execute(sql, (experiment_id, uuid, md5sig, filepath, sequenced_date))
+#	return db.c.lastrowid
 
 def get_basecaller_version(g):
 	try:
@@ -82,19 +107,32 @@ def basecaller_get_or_delete(db, name, version):
 	db.conn.commit()
 	return db.c.lastrowid
 
-def basecall_add(db, read_id, basecaller_id, group, template, template_length):
-	sql = "INSERT INTO basecall ( file_id, basecaller_id, group_id, template, template_length ) VALUES ( ?, ?, ?, ?, ? )"
-	db.c.execute(sql, (read_id, basecaller_id, group, template, template_length))
+def basecall_add(db, filepath, basecaller_id, group, template, template_length):
+	sql = "INSERT INTO basecall ( filepath, basecaller_id, group_id, template, template_length ) VALUES ( ?, ?, ?, ?, ? )"
+	db.addcommand(sql, (filepath, basecaller_id, group, template, template_length))
+	#db.c.execute(sql, (read_id, basecaller_id, group, template, template_length))
 
 class Db:
-	def __init__(self, dbname):
-		self.conn = sqlite3.connect(dbname, check_same_thread=False, timeout=30)
+	def __init__(self, dbname, isolation_level):
+		self.conn = sqlite3.connect(dbname, check_same_thread=False, timeout=60, isolation_level=isolation_level)
 		self.c = self.conn.cursor()
+
+		self.c.execute ("PRAGMA journal_mode = WAL")
+		self.c.execute ("PRAGMA synchronous = NORMAL")
+
+		self.commands = []
 
 	def __del__(self):
 		self.conn.close()
 
-def process(db, lofn):
+	def addcommand(self, c, args):
+		self.commands.append((c, args))
+	
+	def runcommands(self):
+		for cmd in self.commands:
+			self.c.execute(cmd[0], cmd[1])
+
+def process(db, db2, lofn, args):
 	matcher = re.compile('Basecall_1D_(\d+)')
 	n_added = 0
 	n_skipped = 0
@@ -112,17 +150,23 @@ def process(db, lofn):
 		#            if md5 same & path same -- skip
 		#            or skip it
 
+		realfn = fn
+		if args.alternate_path:
+			realfn = "%s/%s" % (args.alternate_path, fn.split("/")[-1])
+
+		print "Realfn %s Actual fn %s" % (realfn, fn)
+
 		tracked = trackedfiles_find(db, fn)
 
 		if not tracked:
 			print "Processing %s %s" % (n_added+n_skipped, fn)
 			try:
-				md5sig = md5(fn)
+				md5sig = md5(realfn)
 			except:
 				print >>sys.stderr, "Exception with md5!"
 				continue
 
-			fast5 = Fast5File(fn)
+			fast5 = Fast5File(realfn)
 			if not fast5.is_open:
 				print >>sys.stderr, "Cannot open %s" % (fn,)
 				continue
@@ -151,7 +195,7 @@ def process(db, lofn):
 			sequenced_date = int(block.attrs['start_time'])
 			sample_frequency = int(fast5.get_sample_frequency())
 			start_time = exp_start_time + (sequenced_date / sample_frequency)
-			read_id = trackedfiles_add(db, experiment_id, uuid, md5sig, fn, start_time)
+			trackedfiles_add(db2, experiment_id, uuid, md5sig, fn, start_time)
 
 			# basecalls
 			analyses = fast5.hdf5file.get('Analyses')
@@ -175,8 +219,7 @@ def process(db, lofn):
 							template_length = len(b.strip())
 						else:
 							template_length = None
-						basecall_add(db, read_id, basecaller_id, group, template, template_length)
-			db.conn.commit()
+						basecall_add(db2, fn, basecaller_id, group, template, template_length)
 
 			n_added += 1
 		else:
@@ -186,9 +229,13 @@ def process(db, lofn):
 		if (n_added + n_skipped) % 1000 == 0:
 			print >>sys.stderr, "Added %s, skipped %s" % (n_added, n_skipped)
 
+	db2.runcommands()
+	db2.conn.commit()
+
 def run(parser, args):
-	db = Db(args.db)
-	process(db, (fn.rstrip() for fn in open(args.fofn)))
+	db1 = Db(args.db, None)
+	db2 = Db(args.db, 'DEFERRED')
+	process(db1, db2, (fn.rstrip() for fn in open(args.fofn)), args)
 
 def import_reads_parallel(fofn):
 	files = [fn.rstrip() for fn in open(fofn)]

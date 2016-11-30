@@ -57,13 +57,15 @@ create table basecaller (
 -- TODO: barcoding
 
 create table basecall (
-  file_id integer references trackedfiles ( file_id ) not null,
+  file_id integer references trackedfiles ( file_id ) null,
+  filepath text not null references trackedfiles ( filepath ) not null,
   basecaller_id integer references basecaller ( basecaller_id ) not null,
   group_id integer not null,
   template text null,
   template_length integer null
-);
-"""]
+);""",
+
+"""create index basecall_filepath on basecall ( filepath );"""]
 
 import sqlite3
 import logging

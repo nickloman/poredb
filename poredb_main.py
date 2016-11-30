@@ -22,6 +22,8 @@ def run_subtool(parser, args):
 		import fastq as submodule
 	elif args.command == 'updatelengths':
 		import updatelengths as submodule
+	elif args.command == 'worklist':
+		import worklist as submodule
 
 	# run the chosen submodule.
 	submodule.run(parser, args)
@@ -54,6 +56,7 @@ def main():
 	                           help='The poredb database.')
 	parser_import.add_argument('fofn', metavar='FOFN',
 	                           help='A file containing a list of file names.')
+	parser_import.add_argument('--alternate-path', metavar='alternate_path')
 	parser_import.set_defaults(func=run_subtool)
 
 	# fastq
@@ -63,6 +66,14 @@ def main():
                              help='The name of the database.')
 	parser_fastq.add_argument('-l', '--lengths', dest='report_lengths', default=False, action='store_true', help="Report lengths instead of bases")
 	parser_fastq.set_defaults(func=run_subtool)
+
+	# worklist
+	parser_worklist = subparsers.add_parser('worklist')
+	parser_worklist.add_argument('db', metavar='DB',
+                             help='The name of the database.')
+	parser_worklist.add_argument('fofn', metavar='FOFN',
+                                   help='A file containing a list of file names.')
+        parser_worklist.set_defaults(func=run_subtool)
 
 	# updatelengths
 	parser_updatelengths = subparsers.add_parser('updatelengths', help='')
