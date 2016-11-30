@@ -60,7 +60,8 @@ create table basecall (
   file_id integer references trackedfiles ( file_id ) not null,
   basecaller_id integer references basecaller ( basecaller_id ) not null,
   group_id integer not null,
-  template text null
+  template text null,
+  template_length integer null
 );
 """]
 
