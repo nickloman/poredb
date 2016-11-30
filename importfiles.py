@@ -9,6 +9,7 @@ import hashlib
 import re
 import sqlite3
 import logging
+import mmap
 
 logging.basicConfig()
 logger = logging.getLogger('poretools')
@@ -20,26 +21,32 @@ def flowcell_get_or_create(db, flowcell_id, asic_id):
 	if r:
 		return
 
+	print "ADD: flowcell_id %s asic_id %s" % (flowcell_id, asic_id)
 	sql = "INSERT INTO flowcell ( flowcell_id, asic_id ) VALUES ( ?, ? )"
 	db.c.execute(sql, (flowcell_id, asic_id))
 	db.conn.commit()
 
-def experiment_get_or_create(db, flowcell_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id):
+def experiment_get_or_create(db, flowcell_id, asic_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id):
 	sql = "SELECT experiment_id FROM experiment WHERE experiment_id = ?"
 	db.c.execute(sql, (experiment_id,))
 	r = db.c.fetchone()
 	if r:
 		return
 
-	sql = "INSERT INTO experiment ( flowcell_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id ) VALUES ( ?, ?, ?, ?, ?, ?, ? )"
-	db.c.execute(sql, (flowcell_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id))
+	sql = "INSERT INTO experiment ( flowcell_id, asic_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ? )"
+	db.c.execute(sql, (flowcell_id, asic_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id))
 	db.conn.commit()
 
 def md5(fname):
 	hash_md5 = hashlib.md5()
 	with open(fname, "rb") as f:
-		for chunk in iter(lambda: f.read(1024*200), b""):
+		mm = mmap.mmap(f.fileno(), 0, prot=mmap.PROT_READ)
+
+		for chunk in iter(lambda: mm.read(1024*1024*1), b""):
 			hash_md5.update(chunk)
+
+		mm.close()
+
 		return hash_md5.hexdigest()
 
 def trackedfiles_find(db, fn):
@@ -90,9 +97,10 @@ class Db:
 def process(db, lofn):
 	matcher = re.compile('Basecall_1D_(\d+)')
 	n_added = 0
+	n_skipped = 0
 
 	for fn in lofn:
-		print >>sys.stderr, "Processing %s" % (fn,)
+		#print >>sys.stderr, "Processing %s" % (fn,)
 
 		# how to handle files
 		# first - is fn in database?
@@ -107,18 +115,26 @@ def process(db, lofn):
 		tracked = trackedfiles_find(db, fn)
 
 		if not tracked:
+			print "Processing %s %s" % (n_added+n_skipped, fn)
+			try:
+				md5sig = md5(fn)
+			except:
+				print >>sys.stderr, "Exception with md5!"
+				continue
+
 			fast5 = Fast5File(fn)
 			if not fast5.is_open:
 				print >>sys.stderr, "Cannot open %s" % (fn,)
 				continue
 
-			print >>sys.stderr, fn
+			#print >>sys.stderr, fn
 			block = fast5.find_read_number_block_fixed_raw()
 			uuid = block.attrs['read_id']
 
 			# get flowcell
 			flowcell_id = fast5.get_flowcell_id()
 			asic_id = fast5.get_asic_id()
+
 			flowcell_get_or_create(db, flowcell_id, asic_id)
 
 			# get experiment
@@ -129,12 +145,11 @@ def process(db, lofn):
 			host_name = fast5.get_host_name()
 			minion_id = fast5.get_device_id()
 
-			experiment_get_or_create(db, flowcell_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id)
+			experiment_get_or_create(db, flowcell_id, asic_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id)
 
 			# add trackedfile
 			sequenced_date = int(block.attrs['start_time'])
 			sample_frequency = int(fast5.get_sample_frequency())
-			md5sig = md5(fn)
 			start_time = exp_start_time + (sequenced_date / sample_frequency)
 			read_id = trackedfiles_add(db, experiment_id, uuid, md5sig, fn, start_time)
 
@@ -164,16 +179,16 @@ def process(db, lofn):
 			db.conn.commit()
 
 			n_added += 1
-			if n_added % 1000 == 0:
-				print >>sys.stderr, "Committing"
 		else:
-			print >>sys.stderr, "Already seen file %s, skipping" % (fn,)
-		db.conn.commit()
+			print "%d: Already seen file %s, skipping" % (n_added+n_skipped, fn,)
+			n_skipped += 1
+
+		if (n_added + n_skipped) % 1000 == 0:
+			print >>sys.stderr, "Added %s, skipped %s" % (n_added, n_skipped)
 
 def run(parser, args):
 	db = Db(args.db)
-	files = [fn.rstrip() for fn in open(args.fofn)]
-	process(db, files)
+	process(db, (fn.rstrip() for fn in open(args.fofn)))
 
 def import_reads_parallel(fofn):
 	files = [fn.rstrip() for fn in open(fofn)]

@@ -11,8 +11,8 @@ import argparse
 
 create_schema = ["""
 create table flowcell (
-  flowcell_id varchar(50) primary key not null,
-  asic_id varchar(50) not null
+  flowcell_id varchar(50) not null,
+  asic_id varchar(50) primary key not null
 );""",
 
 """create unique index flowcell_idx on flowcell ( flowcell_id, asic_id );""",
@@ -20,6 +20,7 @@ create table flowcell (
 """create table experiment (
   flowcell_id varchar(50) references flowcell ( flowcell_id ) not null,
   experiment_id varchar(100) not null,
+  asic_id varchar(50) references flowcell ( asic_id ) not null,
   library_name varchar(40) not null,
   script_name varchar(100) not null,
   host_name varchar(100) not null,
