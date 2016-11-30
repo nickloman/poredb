@@ -65,6 +65,7 @@ def main():
 	parser_fastq.add_argument('db', metavar='DB',
                              help='The name of the database.')
 	parser_fastq.add_argument('-l', '--lengths', dest='report_lengths', default=False, action='store_true', help="Report lengths instead of bases")
+	parser_fastq.add_argument('--group-by-asic', default=False, action='store_true', help='Split into one file per asic_id')
 	parser_fastq.set_defaults(func=run_subtool)
 
 	# worklist
