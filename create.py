@@ -19,7 +19,7 @@ create table flowcell (
 
 """create table experiment (
   flowcell_id varchar(50) references flowcell ( flowcell_id ) not null,
-  experiment_id varchar(100) not null,
+  experiment_id varchar(100) primary key not null,
   asic_id varchar(50) references flowcell ( asic_id ) not null,
   library_name varchar(40) not null,
   script_name varchar(100) not null,
@@ -55,6 +55,7 @@ create table basecaller (
 -- TODO: complement
 -- TODO: 2d
 -- TODO: barcoding
+-- do not use file_id
 
 create table basecall (
   file_id integer references trackedfiles ( file_id ) null,
