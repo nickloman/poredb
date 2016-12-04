@@ -24,6 +24,8 @@ def run_subtool(parser, args):
 		import updatelengths as submodule
 	elif args.command == 'worklist':
 		import worklist as submodule
+	elif args.command == 'stats':
+		import stats as submodule
 
 	# run the chosen submodule.
 	submodule.run(parser, args)
@@ -67,6 +69,13 @@ def main():
 	parser_fastq.add_argument('-l', '--lengths', dest='report_lengths', default=False, action='store_true', help="Report lengths instead of bases")
 	parser_fastq.add_argument('--group-by-asic', default=False, action='store_true', help='Split into one file per asic_id')
 	parser_fastq.set_defaults(func=run_subtool)
+
+	# stats
+	parser_stats = subparsers.add_parser('stats', help='Show basic summary statistics about database')
+	parser_stats.add_argument('db', metavar='DB',
+                             help='The name of the database.')
+	parser_stats.add_argument('--group-by-asic', default=False, action='store_true', help='Split into one file per asic_id')
+	parser_stats.set_defaults(func=run_subtool)
 
 	# worklist
 	parser_worklist = subparsers.add_parser('worklist')

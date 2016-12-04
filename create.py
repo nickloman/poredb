@@ -32,17 +32,17 @@ create table flowcell (
 
 """-- all files in file system
 create table trackedfiles (
-  file_id integer primary key not null,
+  file_id integer null,
   experiment_id varchar(100) references experiment ( experiment_id ) not null,
   uuid varchar(64) not null,
   md5 varchar(64) not null,
-  filepath text not null,
+  filepath text primary key not null,
   sequenced_date integer not null
 );""",
 
-"""create unique index trackedfiles_filepath on trackedfiles ( filepath );""",
+"""-- create unique index trackedfiles_filepath on trackedfiles ( filepath );""",
 
-"""create index trackedfiles_uuid on trackedfiles ( uuid );""",
+"""-- create index trackedfiles_uuid on trackedfiles ( uuid );""",
 
 """-- basecaller
 create table basecaller (
@@ -57,7 +57,7 @@ create table basecaller (
 -- TODO: barcoding
 
 create table basecall (
-  file_id integer references trackedfiles ( file_id ) null,
+  file_id integer null,
   filepath text not null references trackedfiles ( filepath ) not null,
   basecaller_id integer references basecaller ( basecaller_id ) not null,
   group_id integer not null,
@@ -65,7 +65,7 @@ create table basecall (
   template_length integer null
 );""",
 
-"""create index basecall_filepath on basecall ( filepath );"""]
+"""-- create index basecall_filepath on basecall ( filepath );"""]
 
 import sqlite3
 import logging

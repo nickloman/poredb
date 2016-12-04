@@ -23,6 +23,9 @@ def run(parser, args):
 
 	c1 = conn.cursor()
 
+	c1.execute('pragma journal_mode=DELETE;')
+	c1.execute('pragma synchronous=1;')
+
 	resultset = c.execute(statement)
 	for r in resultset:
 		a,b,c,d,e = r[1].split("\n")			

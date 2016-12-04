@@ -73,7 +73,7 @@ def md5(fname):
 		return hash_md5.hexdigest()
 
 def trackedfiles_find(db, fn):
-	sql = "SELECT file_id FROM trackedfiles WHERE filepath = ?"
+	sql = "SELECT filepath FROM trackedfiles WHERE filepath = ?"
 	db.c.execute(sql, (fn,))
 	return db.c.fetchone()
 
