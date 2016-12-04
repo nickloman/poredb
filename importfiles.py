@@ -131,6 +131,7 @@ class Db:
 	def runcommands(self):
 		for cmd in self.commands:
 			self.c.execute(cmd[0], cmd[1])
+		self.commands = []
 
 def process(db, db2, lofn, args):
 	matcher = re.compile('Basecall_1D_(\d+)')
@@ -222,6 +223,10 @@ def process(db, db2, lofn, args):
 						basecall_add(db2, fn, basecaller_id, group, template, template_length)
 
 			n_added += 1
+			if n_added % 1000 == 0:
+				print "Committing"
+				db2.runcommands()
+				db2.conn.commit()
 		else:
 			print "%d: Already seen file %s, skipping" % (n_added+n_skipped, fn,)
 			n_skipped += 1
