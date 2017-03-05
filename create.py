@@ -37,7 +37,11 @@ create table trackedfiles (
   uuid varchar(64) not null,
   md5 varchar(64) not null,
   filepath text primary key not null,
-  sequenced_date integer not null
+  sequenced_date integer not null,
+  channel integer not null,
+  read_number integer not null,
+  mux integer not null,
+  duration integer not null
 );""",
 
 """-- create unique index trackedfiles_filepath on trackedfiles ( filepath );""",
@@ -63,7 +67,8 @@ create table basecall (
   basecaller_id integer references basecaller ( basecaller_id ) not null,
   group_id integer not null,
   template text null,
-  template_length integer null
+  template_length integer null,
+  num_events integer not null
 );""",
 
 """-- create index basecall_filepath on basecall ( filepath );"""]
