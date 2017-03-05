@@ -1,5 +1,4 @@
 # Thanks for Andreas Klosterman for dask suggestion
-from poretools.poretools.Fast5File import Fast5File
 import sys
 import md5
 import hashlib

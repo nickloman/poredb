@@ -1,6 +1,4 @@
-# Thanks for Andreas Klosterman for dask suggestion
-from poretools.poretools.Fast5File import Fast5File
-from dask import compute, delayed
+from poretools.Fast5File import Fast5File
 import dask.multiprocessing
 import dask.threaded
 import sys
@@ -77,9 +75,9 @@ def trackedfiles_find(db, fn):
 	db.c.execute(sql, (fn,))
 	return db.c.fetchone()
 
-def trackedfiles_add(db, experiment_id, uuid, md5sig, filepath, sequenced_date):
-	sql = "INSERT INTO trackedfiles ( experiment_id, uuid, md5, filepath, sequenced_date ) VALUES ( ?, ?, ?, ?, ? )"
-	db.addcommand(sql, (experiment_id, uuid, md5sig, filepath, sequenced_date))
+def trackedfiles_add(db, experiment_id, uuid, md5sig, filepath, sequenced_date, read_number, channel_number, mux, duration):
+	sql = "INSERT INTO trackedfiles ( experiment_id, uuid, md5, filepath, sequenced_date, read_number, channel, mux, duration ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )"
+	db.addcommand(sql, (experiment_id, uuid, md5sig, filepath, sequenced_date, read_number, channel_number, mux, duration))
 
 #	db.c.execute(sql, (experiment_id, uuid, md5sig, filepath, sequenced_date))
 #	return db.c.lastrowid
@@ -107,9 +105,9 @@ def basecaller_get_or_delete(db, name, version):
 	db.conn.commit()
 	return db.c.lastrowid
 
-def basecall_add(db, filepath, basecaller_id, group, template, template_length):
-	sql = "INSERT INTO basecall ( filepath, basecaller_id, group_id, template, template_length ) VALUES ( ?, ?, ?, ?, ? )"
-	db.addcommand(sql, (filepath, basecaller_id, group, template, template_length))
+def basecall_add(db, filepath, basecaller_id, group, template, template_length, num_events):
+	sql = "INSERT INTO basecall ( filepath, basecaller_id, group_id, template, template_length, num_events ) VALUES ( ?, ?, ?, ?, ?, ? )"
+	db.addcommand(sql, (filepath, basecaller_id, group, template, template_length, num_events))
 	#db.c.execute(sql, (read_id, basecaller_id, group, template, template_length))
 
 class Db:
@@ -191,6 +189,7 @@ def process(db, db2, lofn, args):
 			library_name = fast5.get_sample_name()
 			script_name = fast5.get_script_name()
 			exp_start_time = fast5.get_exp_start_time()
+			print exp_start_time
 			host_name = fast5.get_host_name()
 			minion_id = fast5.get_device_id()
 
@@ -200,7 +199,12 @@ def process(db, db2, lofn, args):
 			sequenced_date = int(block.attrs['start_time'])
 			sample_frequency = int(fast5.get_sample_frequency())
 			start_time = exp_start_time + (sequenced_date / sample_frequency)
-			trackedfiles_add(db2, experiment_id, uuid, md5sig, fn, start_time)
+			read_number = fast5.get_read_number()
+			channel_number = fast5.get_channel_number()
+			mux = fast5.get_start_mux()
+			duration = fast5.get_duration()
+
+			trackedfiles_add(db2, experiment_id, uuid, md5sig, fn, start_time, read_number, channel_number, mux, duration)
 
 			# basecalls
 			analyses = fast5.hdf5file.get('Analyses')
@@ -216,15 +220,17 @@ def process(db, db2, lofn, args):
 
 						try:
 							template = analyses.get("%s/BaseCalled_template" % (k,))['Fastq'][()]
+							num_events = len(analyses.get("%s/BaseCalled_template" % (k,))['Events'])
 						except:
 							template = None
+							num_events = 0
 
 						if template:
 							a,b,c,d,e = template.split("\n")
 							template_length = len(b.strip())
 						else:
 							template_length = None
-						basecall_add(db2, fn, basecaller_id, group, template, template_length)
+						basecall_add(db2, fn, basecaller_id, group, template, template_length, num_events)
 
 			n_added += 1
 			if n_added % 1000 == 0:

@@ -1,10 +1,6 @@
 # Thanks for Andreas Klosterman for dask suggestion
 # Thanks to Aaron Quinlan for the argparse implementation from poretools.
 
-from poretools.poretools.Fast5File import Fast5File
-from dask import compute, delayed
-import dask.multiprocessing
-import dask.threaded
 import sys
 import md5
 import hashlib

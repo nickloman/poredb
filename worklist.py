@@ -1,4 +1,3 @@
-from poretools.poretools.Fast5File import Fast5File
 from importfiles import trackedfiles_find, Db
 
 def process(db, lofn):

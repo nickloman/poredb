@@ -1,8 +1,4 @@
 # Thanks for Andreas Klosterman for dask suggestion
-from poretools.poretools.Fast5File import Fast5File
-from dask import compute, delayed
-import dask.multiprocessing
-import dask.threaded
 import sys
 import md5
 import hashlib

@@ -17,4 +17,7 @@ Poredb is a way to manage very large Oxford Nanopore datasets on the basic princ
 	poredb fastq myexperiment.db > myexperiment.fastq
 
 
+# Thanks
+
+Andreas Klosterman for dask suggestion.
 
