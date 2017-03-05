@@ -39,12 +39,12 @@ def run(parser, args):
 			template = r[2]
 			uuid = r[1]
 
-			if uuid in uuiddb:
-				continue
-			else:
-				uuiddb.add(uuid)
-
 			if template:
+				if uuid in uuiddb:
+					continue
+				else:
+					uuiddb.add(uuid)
+
 				a,b,c,d,e = template.split("\n")
 				l = len(b.strip())
 				statscache[r[0]]['reads'] += 1

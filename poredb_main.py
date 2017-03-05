@@ -26,6 +26,8 @@ def run_subtool(parser, args):
 		import worklist as submodule
 	elif args.command == 'stats':
 		import stats as submodule
+	elif args.command == 'find':
+		import find as submodule
 
 	# run the chosen submodule.
 	submodule.run(parser, args)
@@ -83,12 +85,18 @@ def main():
                              help='The name of the database.')
 	parser_worklist.add_argument('fofn', metavar='FOFN',
                                    help='A file containing a list of file names.')
-        parser_worklist.set_defaults(func=run_subtool)
+	parser_worklist.set_defaults(func=run_subtool)
 
 	# updatelengths
 	parser_updatelengths = subparsers.add_parser('updatelengths', help='')
 	parser_updatelengths.add_argument('db', metavar='DB', help='The name of the database.')
 	parser_updatelengths.set_defaults(func=run_subtool)
+
+	# findfiles
+	parser_find = subparsers.add_parser('find', help='Find path to files by UUID')
+	parser_find.add_argument('db', metavar='DB', help='The name of the database.')
+	parser_find.add_argument('fofn', metavar='FOFN', help='A file containing a list of UUIDs.')
+	parser_find.set_defaults(func=run_subtool)
 
 	args = parser.parse_args()
 

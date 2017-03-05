@@ -174,7 +174,11 @@ def process(db, db2, lofn, args):
 
 			#print >>sys.stderr, fn
 			block = fast5.find_read_number_block_fixed_raw()
-			uuid = block.attrs['read_id']
+			try:
+				uuid = block.attrs['read_id']
+			except:
+				print >>sys.stderr, "No raw block for %s" % (fn,)
+				continue
 
 			# get flowcell
 			flowcell_id = fast5.get_flowcell_id()
