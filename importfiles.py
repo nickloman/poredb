@@ -48,7 +48,7 @@ def experiment_get_or_create(db, flowcell_id, asic_id, experiment_id, library_na
 		return
 
 	sql = "INSERT INTO experiment ( flowcell_id, asic_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ? )"
-	db.c.execute(sql, (flowcell_id, asic_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id))
+	#db.c.execute(sql, (flowcell_id, asic_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id))
 
 	try:
 	        db.c.execute(sql, (flowcell_id, asic_id, experiment_id, library_name, script_name, exp_start_time, host_name, minion_id))
